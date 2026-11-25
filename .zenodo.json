@@ -20,7 +20,7 @@
     }
   ],
   "description": "An open, provenance-tracked workflow that automates the spatial and temporal adaptive reflectance fusion model (STARFM) for Landsat 8/9 Collection 2 surface reflectance with daily MODIS or VIIRS reflectance: data discovery and download, daily nadir-view BRDF normalization with a land-cover fallback, registration, execution of the original USDA-ARS STARFM program (v1.2.2, CC0), held-out Landsat validation, and scoring against nearest-date persistence and linear temporal interpolation on identical pixels. Campaigns of hundreds of predictions run as Slurm job arrays with cross-node cache locks, resumable retries and recorded failure causes.",
-  "license": "MIT",
+  "license": "mit",
   "keywords": [
     "spatiotemporal fusion",
     "STARFM",
@@ -34,7 +34,13 @@
     {
       "identifier": "10.1109/TGRS.2006.872081",
       "relation": "references",
-      "scheme": "doi"
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "https://github.com/AhmadrezaP/starfm-campaign-records",
+      "relation": "isSupplementedBy",
+      "resource_type": "dataset"
     }
-  ]
+  ],
+  "version": "1.0.0"
 }
