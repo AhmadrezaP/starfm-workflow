@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from scipy import stats  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -488,6 +489,222 @@ number("worstTenDates", worst.case.nunique())
 number("worstTenMinOffset", worst.rel_error.min(), "{:.0f}")
 number("worstTenMaxOffset", worst.rel_error.max(), "{:.0f}")
 number("worstTenVisible", int(worst.band.isin(["B1", "B2", "B3"]).sum()))
+
+# ---------------------------------------------------------------- statistical tests
+# Bands of one case share inputs, so the case (region and target date) is the unit wherever bands are pooled:
+# each method's case value is the mean of log RMSE over the case's bands (the log of the geometric mean).
+# Within one band, each case contributes one prediction, so predictions are the unit there.
+METHODS = ["starfm", "linear_interpolation", "persistence_nearest"]
+SHORT = {"starfm": "STARFM", "linear_interpolation": "Linear interpolation", "persistence_nearest": "Persistence"}
+log_rmse = np.log(base[[f"{m}_rmse" for m in METHODS]].set_axis(METHODS, axis=1)).assign(
+    case=base.case, band=base.band, region=base.region, tuning=base.tuning_case)
+by_case = log_rmse.groupby("case")[METHODS].mean()
+
+
+def holm(pvalues):
+    order = np.argsort(pvalues)
+    adjusted, running = np.empty(len(pvalues)), 0.0
+    for rank, i in enumerate(order):
+        running = max(running, (len(pvalues) - rank) * pvalues[i])
+        adjusted[i] = min(1.0, running)
+    return adjusted
+
+
+def paired(first, second):
+    """Wilcoxon signed-rank test on log RMSE differences, with the matched-pairs rank-biserial correlation."""
+    d = (first - second).to_numpy()
+    ranks = stats.rankdata(np.abs(d))
+    return dict(n=len(d), ratio=float(np.exp(np.median(d))), lower=int((d < 0).sum()),
+                r=float((ranks[d > 0].sum() - ranks[d < 0].sum()) / ranks.sum()), p=float(stats.wilcoxon(d).pvalue))
+
+
+def pvalue(p):
+    if p < 0.001:
+        mantissa, exponent = f"{p:.1e}".split("e")
+        return f"${mantissa}\\times10^{{{int(exponent)}}}$"
+    return f"{p:.3f}"
+
+
+friedman = stats.friedmanchisquare(*[by_case[m] for m in METHODS])
+number("friedmanChi", friedman.statistic, "{:.1f}")
+number("friedmanP", pvalue(friedman.pvalue))
+number("friedmanW", friedman.statistic / (len(by_case) * (len(METHODS) - 1)), "{:.2f}")
+number("testCases", len(by_case))
+mean_rank = by_case.rank(axis=1).mean()
+for m, label in [("starfm", "Starfm"), ("linear_interpolation", "Linear"), ("persistence_nearest", "Persistence")]:
+    number(f"meanRank{label}", mean_rank[m], "{:.2f}")
+
+panels = []
+pairs = [("starfm", "linear_interpolation"), ("starfm", "persistence_nearest"), ("linear_interpolation", "persistence_nearest")]
+results = [paired(by_case[a], by_case[b]) for a, b in pairs]
+for res, p in zip(results, holm([r["p"] for r in results])):
+    res["p_holm"] = p
+panels.append(("Pairwise comparisons; unit: case", [(f"{SHORT[a]} vs {SHORT[b].lower() if b != 'starfm' else SHORT[b]}", r)
+                                                   for (a, b), r in zip(pairs, results)]))
+for (a, b), r, key in zip(pairs, results, ["StarfmLinear", "StarfmPersistence", "LinearPersistence"]):
+    number(f"wilcox{key}P", pvalue(r["p_holm"]))
+    number(f"wilcox{key}Ratio", r["ratio"], "{:.2f}")
+    number(f"wilcox{key}R", r["r"], "{:.2f}")
+    number(f"wilcox{key}Lower", r["lower"])
+
+rows = []
+for band in BANDS:
+    s = log_rmse[log_rmse.band == band]
+    rows.append((f"{band} ({BAND_NAMES[band]})", paired(s.starfm, s.linear_interpolation)))
+for (_, r), p in zip(rows, holm([r["p"] for _, r in rows])):
+    r["p_holm"] = p
+panels.append(("STARFM vs linear interpolation by band; unit: prediction", rows))
+number("bandTestMaxP", pvalue(max(r["p_holm"] for _, r in rows)))
+
+rows = []
+for key in REGION_ORDER:
+    s = log_rmse[log_rmse.region == key].groupby("case")[METHODS].mean()
+    rows.append((key, paired(s.starfm, s.linear_interpolation)))
+for (_, r), p in zip(rows, holm([r["p"] for _, r in rows])):
+    r["p_holm"] = p
+panels.append(("STARFM vs linear interpolation by region; unit: case", rows))
+number("regionTestMaxP", pvalue(max(r["p_holm"] for _, r in rows)))
+number("regionTestNEKSP", pvalue(rows[0][1]["p_holm"]))
+number("regionTestNEKSRatio", rows[0][1]["ratio"], "{:.2f}")
+
+indep_case = log_rmse[~log_rmse.tuning.astype(bool)].groupby("case")[METHODS].mean()
+r = paired(indep_case.starfm, indep_case.linear_interpolation)
+r["p_holm"] = r["p"]
+panels.append(("STARFM vs linear interpolation, independent cases only", [("Independent cases", r)]))
+number("indepTestCases", r["n"])
+number("indepTestP", pvalue(r["p"]))
+
+lines = []
+for title, rows in panels:
+    lines.append(f"\\multicolumn{{6}}{{@{{}}l}}{{\\textit{{{title}}}}}\\\\")
+    for label, r in rows:
+        lines.append(f"{label} & {r['n']} & {r['ratio']:.2f} & {r['lower']} & {num(r['r'], 2)} & {pvalue(r['p_holm'])}\\\\")
+    lines.append("\\midrule")
+write_table("tests", "\\setlength{\\tabcolsep}{4pt}\n\\begin{tabular}{@{}lrrrrl@{}}\n\\toprule\n"
+            "Comparison & $n$ & RMSE ratio & First lower & $r_{\\mathrm{rb}}$ & $p$ (Holm)\\\\\n\\midrule\n"
+            + "\n".join(lines[:-1]) + "\n\\bottomrule\n\\end{tabular}\n")
+
+# Case-cluster bootstrap: resample cases with replacement, keeping all predictions of a sampled case.
+rng = np.random.default_rng(2026)
+case_ids = ok.case.unique()
+rows_of = {c: np.flatnonzero(ok.case.to_numpy() == c) for c in case_ids}
+starfm_lower_linear = (ok.starfm_rmse < ok.linear_interpolation_rmse).to_numpy()
+abs_offset, ratio, at_bound = ok.rel_error.abs().to_numpy(), ok.ratio.to_numpy(), ok.shift_at_bound.to_numpy()
+share, rho, bound_ratio = [], [], []
+for _ in range(10000):
+    idx = np.concatenate([rows_of[c] for c in rng.choice(case_ids, len(case_ids))])
+    share.append(100 * starfm_lower_linear[idx].mean())
+    rho.append(stats.spearmanr(abs_offset[idx], ratio[idx]).statistic)
+    inside, limit = ratio[idx][~at_bound[idx]], ratio[idx][at_bound[idx]]
+    if len(limit):
+        bound_ratio.append(np.median(limit) / np.median(inside))
+for name, values, fmt in [("shareCI", share, "{:.0f}"), ("spearmanCI", rho, "{:.2f}"), ("boundRatioCI", bound_ratio, "{:.2f}")]:
+    low, high = np.percentile(values, [2.5, 97.5])
+    number(f"{name}Low", low, fmt)
+    number(f"{name}High", high, fmt)
+number("boundRatioMultiple", np.median(ratio[at_bound]) / np.median(ratio[~at_bound]), "{:.2f}")
+
+# Development campaign: Friedman tests with cases as blocks (log RMSE averaged over the case's complete bands).
+for family, column in [("distance", "distance"), ("uncertainty", "uncertainty")]:
+    table = np.log(dev[dev.family == family].pivot_table(index=dev_key, columns=column, values="rmse").dropna())
+    cases = table.groupby(level=[0, 1, 2]).mean()
+    test = stats.friedmanchisquare(*[cases[c] for c in cases.columns])
+    number(f"dev{family.capitalize()}FriedmanCases", len(cases))
+    number(f"dev{family.capitalize()}FriedmanChi", test.statistic, "{:.1f}")
+    number(f"dev{family.capitalize()}FriedmanDf", len(cases.columns) - 1)
+    number(f"dev{family.capitalize()}FriedmanP", pvalue(test.pvalue))
+
+# --------------------------------------------------------------- computational cost
+# Slurm accounting (sacct) of every array task of the evaluation campaigns, including failed attempts and retries.
+COMPUTE = DATA / "COMPUTE"
+columns = "JobID,JobName,State,ElapsedRaw,TotalCPU,CPUTimeRAW,MaxRSS,AllocCPUS,ReqMem,NodeList,Start,End,ExitCode"
+acct = pd.read_csv(COMPUTE / "sacct_final_main.txt", sep="|", names=columns.split(","))
+
+
+def seconds(text: str) -> float:
+    days, _, clock = text.rpartition("-")
+    parts = [float(v) for v in clock.split(":")]
+    parts = [0.0] * (3 - len(parts)) + parts
+    return int(days or 0) * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def gigabytes(text) -> float:
+    units = {"K": 1 / 1024 ** 2, "M": 1 / 1024, "G": 1.0, "T": 1024.0}
+    return float(text[:-1]) * units[text[-1]] if isinstance(text, str) and text[-1] in units else np.nan
+
+
+steps = acct[acct.JobID.str.endswith(".batch")].assign(key=lambda d: d.JobID.str[:-6])
+tasks = acct[~acct.JobID.str.contains(".", regex=False)].assign(key=lambda d: d.JobID)
+tasks = tasks.merge(steps[["key", "MaxRSS"]].rename(columns={"MaxRSS": "rss"}), on="key", how="left")
+tasks["array"] = tasks.key.str.split("_").str[0]
+tasks["index"] = tasks.key.str.split("_").str[1].astype(int)
+submissions = {c: json.loads((DATA / f"DATE_PLANS/{c}/array_submissions.json").read_text())
+               for c in ["final_main_v4", "final_main_c6"]}
+array_campaign = {str(s["job_id"]): c for c, entries in submissions.items() for s in entries}
+tasks["campaign"] = tasks.array.map(array_campaign)
+plan_tasks = {c: {t["index"]: t["test_id"] for t in json.loads((DATA / f"DATE_PLANS/{c}/plan.json").read_text())["tasks"]}
+              for c in ["final_main_v4", "final_main_c6"]}
+tasks["test_id"] = [plan_tasks[c][i] for c, i in zip(tasks.campaign, tasks["index"])]
+tasks["state"] = tasks.State.str.split().str[0]
+tasks["minutes"] = tasks.ElapsedRaw / 60
+tasks["cpu_minutes"] = tasks.TotalCPU.map(seconds) / 60
+tasks["memory_gb"] = tasks.rss.map(gigabytes)
+run = tasks[(tasks.state == "COMPLETED") & tasks.test_id.isin(set(ok.test_id))].merge(
+    ok[["test_id", "region", "sensor"]], on="test_id")
+assert len(run) == len(ok) == run.test_id.nunique()
+run["cpu_use"] = 100 * run.cpu_minutes / (run.minutes * run.AllocCPUS)
+
+def span(series, digits=1):
+    return f"{series.median():.{digits}f} [{series.min():.{digits}f}, {series.max():.{digits}f}]"
+
+rows = []
+for key in REGION_ORDER:
+    for sensor in ["MODIS", "VIIRS"]:
+        g = run[(run.region == key) & (run.sensor == sensor)]
+        if len(g):
+            rows.append(f"{key} & {sensor} & {len(g)} & {span(g.minutes)} & {g.cpu_minutes.median():.1f} & "
+                        f"{g.cpu_use.median():.0f} & {span(g.memory_gb)}\\\\")
+rows.append(f"\\midrule\nAll & & {len(run)} & {span(run.minutes)} & {run.cpu_minutes.median():.1f} & "
+            f"{run.cpu_use.median():.0f} & {span(run.memory_gb)}\\\\")
+write_table("compute", "\\setlength{\\tabcolsep}{4pt}\n\\begin{tabular}{@{}llrlrrl@{}}\n\\toprule\n"
+            "Region & Sensor & $n$ & Wall time (min) & CPU (min) & CPU use (\\%) & Peak memory (GB)\\\\\n\\midrule\n"
+            + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n")
+
+number("computeArrays", tasks.array.nunique())
+number("computeAttempts", len(tasks))
+number("computePlannedTasks", sum(len(v) for v in plan_tasks.values()))
+number("computeMedianMinutes", run.minutes.median(), "{:.1f}")
+number("computeMinMinutes", run.minutes.min(), "{:.0f}")
+number("computeMaxMinutes", run.minutes.max(), "{:.0f}")
+number("computeNinetyMinutes", run.minutes.quantile(0.9), "{:.0f}")
+number("computeCpuUse", run.cpu_use.median(), "{:.0f}")
+number("computeMedianMemory", run.memory_gb.median(), "{:.1f}")
+number("computeMaxMemory", run.memory_gb.max(), "{:.1f}")
+number("computeTaskHours", tasks.ElapsedRaw.sum() / 3600, "{:.0f}")
+number("computeCoreHours", (tasks.ElapsedRaw * tasks.AllocCPUS).sum() / 3600, "{:.0f}")
+failed = tasks[tasks.state != "COMPLETED"]
+number("computeFailedAttempts", len(failed))
+number("computeFailedHours", failed.ElapsedRaw.sum() / 3600, "{:.1f}")
+number("computeFailedShare", 100 * failed.ElapsedRaw.sum() / tasks.ElapsedRaw.sum(), "{:.0f}")
+number("computeFailedMedianMinutes", failed.minutes.median(), "{:.1f}")
+first = tasks[tasks.array == tasks.array.min()]
+first_span = (pd.to_datetime(first.End).max() - pd.to_datetime(first.Start).min()).total_seconds() / 3600
+first_plan = submissions["final_main_v4"][0]
+number("computeFirstArrayTasks", len(first))
+number("computeFirstArrayScored", int(first.key.isin(set(run.key)).sum()))
+number("computeFirstArrayConcurrency", first_plan["concurrency"])
+number("computeFirstArrayHours", int(first_span), "{}")
+number("computeFirstArrayMinutes", round((first_span - int(first_span)) * 60), "{}")
+number("computeThroughput", first.key.isin(set(run.key)).sum() / first_span, "{:.0f}")
+sizes = pd.read_csv(COMPUTE / "input_sizes.txt", sep="|", names=["bytes", "path"])
+sizes["source"] = sizes.path.str.split("/").str[2]
+number("inputFiles", f"{len(sizes):,}".replace(",", "{,}"))
+number("inputGB", sizes.bytes.sum() / 1e9, "{:.0f}")
+for source in ["LANDSAT", "MODIS", "VIIRS"]:
+    number(f"input{source.capitalize()}GB", sizes[sizes.source == source].bytes.sum() / 1e9, "{:.0f}")
+outputs = pd.read_csv(COMPUTE / "prediction_sizes.txt", sep="|", names=["bytes", "path"])
+number("predictionMB", outputs.bytes.mean() / 1e6, "{:.0f}")
+number("predictionTotalGB", outputs.bytes.sum() / 1e9, "{:.1f}")
 
 # ------------------------------------------------------------- figure: examples
 examples = sorted(glob.glob(str(DATA / "BASELINES/examples/*.npz")))

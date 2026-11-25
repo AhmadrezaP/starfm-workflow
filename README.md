@@ -1,6 +1,6 @@
 # STARFM workflow: Landsat-like reflectance from Landsat 8/9 with MODIS or VIIRS
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24542146.svg)](https://doi.org/10.5281/zenodo.24542146)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24542145.svg)](https://doi.org/10.5281/zenodo.24542145)
 
 An open, provenance-tracked workflow that automates the spatial and temporal adaptive reflectance fusion
 model (STARFM; Gao et al. 2006) for Landsat 8/9 Collection 2 surface reflectance with daily reflectance from
@@ -119,11 +119,11 @@ If you use this workflow, please cite the article (citation to be added on publi
 release:
 
 Pourghodrat A, Akasheh SZ, Yu H, Neale CMU (2026) STARFM workflow: Landsat-like reflectance from Landsat 8/9
-with MODIS or VIIRS, with built-in temporal baselines (v1.0.0). Zenodo.
-https://doi.org/10.5281/zenodo.24542146
+with MODIS or VIIRS, with built-in temporal baselines (v1.1.0). Zenodo.
+https://doi.org/10.5281/zenodo.24542145 (all versions; resolves to the latest)
 
 The campaign records behind the article's evaluation are archived separately (CC BY 4.0):
-https://doi.org/10.5281/zenodo.24542148
+https://doi.org/10.5281/zenodo.24542147 (all versions; resolves to the latest)
 
 STARFM itself should be cited as:
 

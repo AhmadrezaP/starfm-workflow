@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below, and cite STARFM (Gao et al. 2006)."
 title: "STARFM workflow: Landsat-like reflectance from Landsat 8/9 with MODIS or VIIRS, with built-in temporal baselines"
-version: 1.0.0
-doi: 10.5281/zenodo.24542146
+version: 1.1.0
+doi: 10.5281/zenodo.24542145
 date-released: 2026-11-25
 repository-code: "https://github.com/AhmadrezaP/starfm-workflow"
 license: MIT
