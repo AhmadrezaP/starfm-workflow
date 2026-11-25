@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, and cite STARFM (Gao et al. 2006)."
+title: "STARFM workflow: Landsat-like reflectance from Landsat 8/9 with MODIS or VIIRS, with built-in temporal baselines"
+version: 1.0.0
+license: MIT
+authors:
+  - family-names: Pourghodrat
+    given-names: Ahmadreza
+    affiliation: "School of Computing, University of Nebraska–Lincoln"
+  - family-names: Akasheh
+    given-names: Sammy Z.
+    affiliation: "Daugherty Water for Food Global Institute, University of Nebraska"
+  - family-names: Yu
+    given-names: Hongfeng
+    affiliation: "School of Computing, University of Nebraska–Lincoln"
+  - family-names: Neale
+    given-names: Christopher M. U.
+    affiliation: "Daugherty Water for Food Global Institute, University of Nebraska"
+keywords:
+  - spatiotemporal fusion
+  - STARFM
+  - Landsat
+  - MODIS
+  - VIIRS
+  - reproducible workflow
+references:
+  - type: article
+    title: "On the blending of the Landsat and MODIS surface reflectance: Predicting daily Landsat surface reflectance"
+    authors:
+      - family-names: Gao
+        given-names: Feng
+      - family-names: Masek
+        given-names: Jeff
+      - family-names: Schwaller
+        given-names: Matthew
+      - family-names: Hall
+        given-names: Forrest
+    journal: "IEEE Transactions on Geoscience and Remote Sensing"
+    year: 2006
+    volume: 44
+    issue: 8
+    start: 2207
+    end: 2218
+    doi: 10.1109/TGRS.2006.872081

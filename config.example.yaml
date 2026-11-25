@@ -1,0 +1,8 @@
+# Copy this file to config.yaml, then add your own credentials.
+# config.yaml is intentionally ignored by Git.
+credentials:
+  earthdata_token: ""
+  usgs_username: ""
+  usgs_m2m_token: ""
+  # Optional: use an already active USGS M2M API key instead of username/token.
+  usgs_m2m_api_key: ""

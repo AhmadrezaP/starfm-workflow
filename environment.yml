@@ -1,0 +1,21 @@
+name: thesis_paper_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - requests
+  - gdal
+  - h5py
+  - pyyaml
+  - pandas
+  - wget
+  - keyring
+  - shapely
+  - geopandas
+  - pyproj
+  - beautifulsoup4
+  - rasterio
+  - pip
+  - pip:
+      - arosics

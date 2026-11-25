@@ -1,0 +1,33 @@
+# Python and editor files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.vscode/
+.idea/
+
+# Credentials and machine-specific configuration
+.env
+.env.*
+config.yaml
+*.pem
+*.key
+
+# Downloaded imagery and generated products
+COREGISTRATION_FILES/
+logs/
+*.tif
+*.tiff
+*.h5
+*.hdf
+*.bin
+*.mask
+*.hdr
+*.log
+
+# STARFM build products
+StarFM_original/source/*.o
+StarFM_original/source/StarFM.exe
+
+# Data downloaded to reproduce the article
+paper/data/
